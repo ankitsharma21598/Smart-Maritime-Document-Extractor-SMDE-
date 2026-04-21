@@ -9,23 +9,17 @@ Node.js + TypeScript backend for maritime document extraction, async job trackin
 - Docker
 - A Groq API key
 
-### 2) Start PostgreSQL (Docker)
-Run this once:
+### 2) Start PostgreSQL (Docker Compose)
 
 ```bash
-docker run --name smde-postgres \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=smde \
-  -p 5432:5432 \
-  -d postgres:16
+docker compose up -d
 ```
 
-If the container already exists, start it:
-
-```bash
-docker start smde-postgres
-```
+This uses `docker-compose.yml` in repo root:
+- container: `smde-pg-container`
+- user/password: `root` / `root`
+- database: `smde_db`
+- volume: `smde`
 
 ### 3) Install dependencies
 
@@ -37,7 +31,7 @@ npm install
 Create a file named `.env` in the repo root:
 
 ```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/smde
+DATABASE_URL=postgres://root:root@localhost:5432/smde_db
 GROQ_API_KEY=gsk_your_key_here
 PORT=3000
 ```
@@ -93,6 +87,14 @@ Use returned `jobId`:
 curl "http://localhost:3000/api/jobs/<jobId>"
 ```
 
+### Session endpoints
+
+```bash
+curl "http://localhost:3000/api/sessions/<sessionId>"
+curl -X POST "http://localhost:3000/api/sessions/<sessionId>/validate?mode=sync"
+curl "http://localhost:3000/api/sessions/<sessionId>/report"
+```
+
 ---
 
 ## Useful scripts
@@ -122,3 +124,33 @@ curl "http://localhost:3000/api/jobs/<jobId>"
 - Supported MIME types: `application/pdf`, `image/jpeg`, `image/png`.
 - Max upload size: 10MB.
 - Rate limit on extract endpoint: 10 requests/min/IP.
+- Async extract requires `mode=async`; sync is `mode=sync` (default).
+- If you see `database "smde_db" does not exist`, run `docker compose down -v && docker compose up -d`.
+
+---
+
+## Docker Compose commands
+
+Start DB:
+
+```bash
+docker compose up -d
+```
+
+Stop DB:
+
+```bash
+docker compose down
+```
+
+Stop and remove DB data volume (full reset):
+
+```bash
+docker compose down -v
+```
+
+Check DB logs:
+
+```bash
+docker compose logs -f postgres
+```
