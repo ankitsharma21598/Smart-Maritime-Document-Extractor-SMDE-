@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16
@@ -10,7 +8,7 @@ services:
       POSTGRES_PASSWORD: root
       POSTGRES_DB: smde_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - smde:/var/lib/postgresql/data
     healthcheck:

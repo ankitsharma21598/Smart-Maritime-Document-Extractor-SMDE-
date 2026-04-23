@@ -1,3 +1,4 @@
+import OpenAI from "openai";
 import { config } from "../config.js";
 import type { LlmExtractionResult, SessionValidationResult } from "../types.js";
 
@@ -24,6 +25,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const llmClient = new OpenAI({
+  apiKey: config.groqApiKey,
+  baseURL: config.groqBaseUrl,
+});
+
 function extractJsonObject(text: string): string {
   const trimmed = text.trim();
   const fence = /```(?:json)?\s*([\s\S]*?)```/m.exec(trimmed);
@@ -43,25 +49,6 @@ export function parseLlmJson<T>(raw: string): T {
   }
 }
 
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
-  } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") {
-      throw new LlmTimeoutError();
-    }
-    throw e;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
 export async function callChatCompletionJson(params: {
   system: string;
   userParts: Array<
@@ -76,44 +63,35 @@ export async function callChatCompletionJson(params: {
   const usesImage = params.userParts.some((p) => p.type === "image_url");
   const model =
     params.model ?? (usesImage ? config.groqVisionModel : config.groqModel);
-  const url = `${config.groqBaseUrl}/chat/completions`;
   let lastErr: unknown;
   for (let attempt = 0; attempt < config.llmMaxRetries; attempt++) {
     try {
-      const res = await fetchWithTimeout(
-        url,
+      const data = await llmClient.chat.completions.create(
         {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${config.groqApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0.1,
-            response_format: { type: "json_object" },
-            messages: [
-              { role: "system", content: params.system },
-              {
-                role: "user",
-                content: params.userParts,
-              },
-            ],
-          }),
+          model,
+          temperature: 0.1,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: params.system },
+            {
+              role: "user",
+              content: params.userParts as OpenAI.Chat.Completions.ChatCompletionContentPart[],
+            },
+          ],
         },
-        LLM_TIMEOUT_MS,
+        {
+          timeout: LLM_TIMEOUT_MS,
+        },
       );
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Groq HTTP ${res.status}: ${body.slice(0, 500)}`);
-      }
-      const data = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
       const content = data.choices?.[0]?.message?.content;
-      if (!content) throw new Error("Empty completion content");
+      if (typeof content !== "string" || !content.trim()) {
+        throw new Error("Empty completion content");
+      }
       return content;
     } catch (e) {
+      if (e instanceof OpenAI.APIConnectionTimeoutError) {
+        throw new LlmTimeoutError();
+      }
       lastErr = e;
       const backoff = 400 * 2 ** attempt + Math.floor(Math.random() * 200);
       await sleep(backoff);

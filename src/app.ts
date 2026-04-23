@@ -35,7 +35,10 @@ export function createApp(): express.Express {
       const resetMs = rl?.resetTime
         ? Math.max(0, rl.resetTime.getTime() - Date.now())
         : 60_000;
-      res.setHeader("Retry-After", String(Math.max(1, Math.ceil(resetMs / 1000))));
+      res.setHeader(
+        "Retry-After",
+        String(Math.max(1, Math.ceil(resetMs / 1000))),
+      );
       sendApiError(
         res,
         429,
@@ -57,13 +60,20 @@ export function createApp(): express.Express {
   app.post("/api/sessions/:id/validate", postSessionValidateController());
   app.get("/api/sessions/:id/report", getSessionReportController());
 
-  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-      sendApiError(res, 413, "FILE_TOO_LARGE", "File exceeds 10MB.");
-      return;
-    }
-    sendApiError(res, 500, "INTERNAL_ERROR", "Unexpected server error.");
-  });
+  app.use(
+    (
+      err: unknown,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction,
+    ) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        sendApiError(res, 413, "FILE_TOO_LARGE", "File exceeds 10MB.");
+        return;
+      }
+      sendApiError(res, 500, "INTERNAL_ERROR", "Unexpected server error.");
+    },
+  );
 
   return app;
 }

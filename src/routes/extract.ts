@@ -11,6 +11,7 @@ const ALLOWED = new Set([
   "image/gif",
 ]);
 
+
 export function extractRouter() {
   return async (req: Request, res: Response) => {
     const file = req.file;
